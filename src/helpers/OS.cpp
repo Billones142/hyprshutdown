@@ -1,8 +1,13 @@
 #include "OS.hpp"
 
+#include "../state/AppState.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <pwd.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <hyprutils/string/String.hpp>
 #include <hyprutils/memory/Casts.hpp>
@@ -67,8 +72,9 @@ std::string OS::appNameForPid(int64_t pid) {
         return "";
 
     auto data = linuxExtractFromStatus(ifs, "Name");
+    std::string name = data.value_or("");
 
-    return data.value_or("");
+    return name;
 #endif
 }
 
@@ -143,4 +149,43 @@ int64_t OS::ppidOf(int64_t pid) {
 #endif
 
     return -1;
+}
+
+std::string OS::exePathForPid(int64_t pid) {
+    std::error_code ec;
+    auto path = std::filesystem::read_symlink("/proc/" + std::to_string(pid) + "/exe", ec);
+    if (ec)
+        return "";
+    std::string pathStr = path.string();
+    return pathStr;
+}
+
+std::string OS::cmdLineForPid(int64_t pid) {
+    std::ifstream ifs("/proc/" + std::to_string(pid) + "/cmdline", std::ios::binary);
+    if (!ifs.good())
+        return "";
+    std::string cmdline((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    if (cmdline.empty())
+        return "";
+    for (size_t i = 0; i < cmdline.size(); ++i) {
+        if (cmdline[i] == '\0') {
+            if (i == cmdline.size() - 1) {
+                cmdline.erase(i);
+            } else {
+                cmdline[i] = ' ';
+            }
+        }
+    }
+    return cmdline;
+}
+
+std::string OS::userForPid(int64_t pid) {
+    struct stat st;
+    if (::stat(("/proc/" + std::to_string(pid)).c_str(), &st) != 0)
+        return "";
+
+    struct passwd* pw = ::getpwuid(st.st_uid);
+    if (pw)
+        return pw->pw_name;
+    return std::to_string(st.st_uid);
 }

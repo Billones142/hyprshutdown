@@ -7,7 +7,52 @@
 #include <chrono>
 #include <cstdint>
 
+#include <regex>
+
 namespace State {
+    enum class EAppCategory {
+        FIRST,
+        NORMAL,
+        LAST
+    };
+
+    struct SShutdownStage {
+        EAppCategory category;
+        int layer;
+
+        bool operator==(const SShutdownStage& other) const {
+            return category == other.category && layer == other.layer;
+        }
+    };
+
+    struct SShutdownRule {
+        int layer = 1;
+        float forceTimeout = -1.0F;
+
+        std::string classPattern;
+        std::string titlePattern;
+        std::string namePattern;
+        std::string cmdlinePattern;
+        std::string pathPattern;
+        std::string userPattern;
+        std::string pidPattern;
+
+        std::regex regexClass;
+        std::regex regexTitle;
+        std::regex regexName;
+        std::regex regexCmdline;
+        std::regex regexPath;
+        std::regex regexUser;
+        std::regex regexPid;
+
+        bool hasClass = false;
+        bool hasTitle = false;
+        bool hasName = false;
+        bool hasCmdline = false;
+        bool hasPath = false;
+        bool hasUser = false;
+        bool hasPid = false;
+    };
     class CApp {
       public:
         CApp(glz::generic::object_t& object);
@@ -30,6 +75,11 @@ namespace State {
         int64_t     m_pid          = -1;
         bool        m_xwayland     = false;
         bool        m_alwaysUsePid = false;
+        bool         m_quitSent     = false;
+        EAppCategory m_category     = EAppCategory::NORMAL;
+        int          m_layer        = 0;
+        float        m_forceTimeout = -1.0F;
+        std::chrono::steady_clock::time_point m_quitTime;
     };
 
     class CAppState {
@@ -52,10 +102,34 @@ namespace State {
         const std::vector<UP<CApp>>& apps() const;
 
         bool                         m_dryRun = false;
+        std::string                  m_configPathOverride;
+
+        float                        m_timeoutFirst  = 3.0F;
+        float                        m_timeoutNormal = 5.0F;
+        float                        m_timeoutLast   = 3.0F;
+        bool                         m_systemdUserExit = false;
+        float                        m_defaultForceTimeout = 5.0F;
+        int                          m_defaultLayer = -1;
+
+        std::vector<SShutdownStage> m_stages;
+        size_t                      m_stageIndex = 0;
+        std::chrono::steady_clock::time_point m_stageStarted;
+
+        void                         loadConfig();
+        std::string                  getConfigPath();
+        void                         classifyApp(CApp& app);
+        bool                         matchRule(const CApp& app, const SShutdownRule& rule);
+        void                         startAppQuit(CApp& app);
+        void                         checkStageTransition();
+        void                         advanceStage();
+        bool                         isAppInStage(const CApp& app, const SShutdownStage& stage) const;
+        float                        getTimeoutForStage(const SShutdownStage& stage) const;
+        std::string                  stageName(const SShutdownStage& stage) const;
 
       private:
         std::vector<UP<CApp>>                 m_apps;
         std::vector<int>                      m_pidsTermedNoWindows;
+        std::vector<SShutdownRule>            m_rules;
 
         std::chrono::steady_clock::time_point m_started = std::chrono::steady_clock::now();
     };

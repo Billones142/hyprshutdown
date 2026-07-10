@@ -42,6 +42,7 @@ int main(int argc, const char** argv, const char** envp) {
     ASSERT(parser.registerBoolOption("no-exit", "", "Do not exit hyprland once apps close"));
     ASSERT(parser.registerStringOption("top-label", "t", "Set the text appearing on top (set to \"Shutting down...\" by default)"));
     ASSERT(parser.registerStringOption("post-cmd", "p", "Set a command ran after all apps and Hyprland shut down"));
+    ASSERT(parser.registerStringOption("config", "c", "Path to a custom configuration file"));
     ASSERT(parser.registerBoolOption("verbose", "", "Enable more logging"));
     ASSERT(parser.registerBoolOption("no-fork", "", "Do not fork/daemonize (run in foreground)"));
     ASSERT(parser.registerIntOption("vt", "", "Switch to VT N after Hyprland exits (fixes NVIDIA+SDDM black screen)"));
@@ -76,6 +77,10 @@ int main(int argc, const char** argv, const char** envp) {
     else {
         g_logger->log(LOG_DEBUG, "Skipping fork due to --no-fork option");
         signal(SIGHUP, SIG_IGN); // Still ignore SIGHUP to survive terminal disconnect
+    }
+
+    if (const auto configOpt = parser.getString("config"); configOpt) {
+        State::state()->m_configPathOverride = configOpt.value();
     }
 
     if (!State::state()->init()) {
