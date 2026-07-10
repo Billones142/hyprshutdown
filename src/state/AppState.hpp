@@ -52,7 +52,7 @@ namespace State {
         bool hasPath = false;
         bool hasUser = false;
         bool hasPid = false;
-        bool hidden = false;
+        std::optional<bool> hidden;
     };
     class CApp {
       public:
@@ -82,6 +82,10 @@ namespace State {
         float        m_forceTimeout = -1.0F;
         std::chrono::steady_clock::time_point m_quitTime;
         bool         m_hidden = false;
+        bool         m_hasWindow = false;
+        bool         m_windowPresent = true;
+        bool         isProcess() const { return m_address.empty(); }
+        bool         isLayer() const { return !m_address.empty() && m_alwaysUsePid; }
     };
 
     class CAppState {
@@ -100,6 +104,7 @@ namespace State {
         float                        secondsPassed() const;
         void                         killAllApps() const;
         void                         reexitApps() const;
+        void                         forceCurrentStage();
 
         const std::vector<UP<CApp>>& apps() const;
 
@@ -113,6 +118,10 @@ namespace State {
         float                        m_defaultForceTimeout = 5.0F;
         int                          m_defaultLayer = -1;
         bool                         m_defaultHidden = false;
+        std::string                  m_lineColor;
+        int                          m_rowMargin = 14;
+        int                          m_lineWidth = 1;
+        bool                         m_hideProcesses = false;
 
         std::vector<SShutdownStage> m_stages;
         size_t                      m_stageIndex = 0;

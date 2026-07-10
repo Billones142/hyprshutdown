@@ -49,52 +49,125 @@ namespace {
 CUI::CUI()  = default;
 CUI::~CUI() = default;
 
-CMonitorState::SAppListApp::SAppListApp(const std::string_view& clazz, const std::string_view& title, bool quitSent) {
+static Hyprtoolkit::CHyprColor parseColor(std::string str, const Hyprtoolkit::CHyprColor& fallback) {
+    if (str.empty())
+        return fallback;
+    if (str[0] == '#')
+        str = str.substr(1);
+    if (str.starts_with("0x") || str.starts_with("0X"))
+        str = str.substr(2);
+    if (str.size() != 6 && str.size() != 8)
+        return fallback;
+    try {
+        uint64_t val = std::stoul(str, nullptr, 16);
+        if (str.size() == 6) {
+            float r = ((val >> 16) & 0xff) / 255.f;
+            float g = ((val >> 8) & 0xff) / 255.f;
+            float b = (val & 0xff) / 255.f;
+            return Hyprtoolkit::CHyprColor{r, g, b, 1.f};
+        } else {
+            float a = ((val >> 24) & 0xff) / 255.f;
+            float r = ((val >> 16) & 0xff) / 255.f;
+            float g = ((val >> 8) & 0xff) / 255.f;
+            float b = (val & 0xff) / 255.f;
+            return Hyprtoolkit::CHyprColor{r, g, b, a};
+        }
+    } catch (...) {
+        return fallback;
+    }
+}
+
+CMonitorState::SAppListApp::SAppListApp(const std::string_view& clazz, const std::string_view& title, bool quitSent, bool isProcess, bool isLayer) {
     m_rawClass = clazz;
     m_quitSent = quitSent;
+    m_isProcess = isProcess;
+    m_isLayer = isLayer;
 
     m_null = Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1.F, 1.F}})->commence();
-    m_null->setMargin(4);
+    m_null->setMargin(State::state()->m_rowMargin);
+
+    m_rowLayout = Hyprtoolkit::CRowLayoutBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1.F, 1.F}})->gap(8)->commence();
+
     m_layout =
-        Hyprtoolkit::CColumnLayoutBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1.F, 1.F}})->gap(2)->commence();
+        Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1.F, 1.F}})->commence();
 
-    m_title = Hyprtoolkit::CTextBuilder::begin()
-                  ->text(std::format("<i>{}</i>", title))
-                  ->color([] { return g_ui->backend()->getPalette()->m_colors.text; })
-                  ->fontSize(Hyprtoolkit::CFontSize{Hyprtoolkit::CFontSize::HT_FONT_TEXT})
-                  ->commence();
-
+    std::string titleColor = isProcess ? "#7f849c" : "#ffffff";
     std::string classText;
-    if (quitSent) {
-        classText = std::format("<span color='#F9E2AF'>⠋</span> {}", clazz);
+    if (isProcess) {
+        classText = std::format("<span color='#7f849c'>⚙ {}</span>", clazz);
+    } else if (isLayer) {
+        classText = std::format("<span color='#ffffff'>🗗 {}</span>", clazz);
     } else {
-        classText = std::format("<span color='#ffffff'>•</span> {}", clazz);
+        classText = std::format("<span color='#ffffff'>🗖 {}</span>", clazz);
     }
 
     m_class = Hyprtoolkit::CTextBuilder::begin()
                   ->text(std::move(classText))
+                  ->align(Hyprtoolkit::HT_FONT_ALIGN_LEFT)
                   ->color([] { return g_ui->backend()->getPalette()->m_colors.text; })
                   ->fontSize(Hyprtoolkit::CFontSize{Hyprtoolkit::CFontSize::HT_FONT_H3})
                   ->commence();
 
-    m_titleNull = Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1, 1}})->commence();
-    m_classNull = Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1, 1}})->commence();
-
     m_class->setPositionMode(Hyprtoolkit::IElement::HT_POSITION_ABSOLUTE);
-    m_class->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_LEFT, true);
-    m_class->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_VCENTER, true);
+    m_class->setAbsolutePosition({0.F, 0.F});
+    m_layout->addChild(m_class);
 
-    m_title->setPositionMode(Hyprtoolkit::IElement::HT_POSITION_ABSOLUTE);
-    m_title->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_LEFT, true);
-    m_title->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_VCENTER, true);
+    if (!title.empty()) {
+        m_title = Hyprtoolkit::CTextBuilder::begin()
+                      ->text(std::format("<span color='{}'><i>{}</i></span>", titleColor, title))
+                      ->align(Hyprtoolkit::HT_FONT_ALIGN_LEFT)
+                      ->color([] { return g_ui->backend()->getPalette()->m_colors.text; })
+                      ->fontSize(Hyprtoolkit::CFontSize{Hyprtoolkit::CFontSize::HT_FONT_TEXT})
+                      ->commence();
 
-    m_titleNull->addChild(m_title);
-    m_classNull->addChild(m_class);
+        m_title->setPositionMode(Hyprtoolkit::IElement::HT_POSITION_ABSOLUTE);
+        m_title->setAbsolutePosition({0.F, 22.F});
+        m_layout->addChild(m_title);
+    }
 
-    m_layout->addChild(m_classNull);
-    m_layout->addChild(m_titleNull);
+    m_lineNull = Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_ABSOLUTE, Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, {1.F, 1.F}})->commence();
+    m_lineNull->setGrow(true, false);
 
-    m_null->addChild(m_layout);
+    if (State::state()->m_lineWidth > 0) {
+        m_line = Hyprtoolkit::CRectangleBuilder::begin()
+                    ->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_ABSOLUTE, {1.F, (float)State::state()->m_lineWidth}})
+                    ->color([] { return parseColor(State::state()->m_lineColor, g_ui->backend()->getPalette()->m_colors.text); })
+                    ->commence();
+        m_line->setPositionMode(Hyprtoolkit::IElement::HT_POSITION_ABSOLUTE);
+        m_line->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_LEFT, true);
+        m_line->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_RIGHT, true);
+        m_line->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_VCENTER, true);
+        m_lineNull->addChild(m_line);
+    }
+
+    std::string iconText;
+    if (quitSent) {
+        iconText = "<span color='#F9E2AF'>⠋</span>";
+    } else {
+        if (isProcess) {
+            iconText = "<span color='#7f849c'>•</span>";
+        } else {
+            iconText = "<span color='#ffffff'>•</span>";
+        }
+    }
+
+    m_icon = Hyprtoolkit::CTextBuilder::begin()
+                 ->text(std::move(iconText))
+                 ->color([] { return g_ui->backend()->getPalette()->m_colors.text; })
+                 ->fontSize(Hyprtoolkit::CFontSize{Hyprtoolkit::CFontSize::HT_FONT_H3})
+                 ->commence();
+
+    m_iconNull = Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_ABSOLUTE, Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, {24.F, 1.F}})->commence();
+    m_icon->setPositionMode(Hyprtoolkit::IElement::HT_POSITION_ABSOLUTE);
+    m_icon->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_RIGHT, true);
+    m_icon->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_VCENTER, true);
+    m_iconNull->addChild(m_icon);
+
+    m_rowLayout->addChild(m_layout);
+    m_rowLayout->addChild(m_lineNull);
+    m_rowLayout->addChild(m_iconNull);
+
+    m_null->addChild(m_rowLayout);
 }
 
 void CMonitorState::SAppListApp::updateText(bool quitSent, int frameIndex) {
@@ -103,17 +176,21 @@ void CMonitorState::SAppListApp::updateText(bool quitSent, int frameIndex) {
     };
 
     if (m_quitSent == quitSent && quitSent) {
-        std::string newText = std::format("<span color='#F9E2AF'>{}</span> {}", SPINNER_FRAMES[frameIndex], m_rawClass);
-        m_class->rebuild()->text(std::move(newText))->commence();
+        std::string newText = std::format("<span color='#F9E2AF'>{}</span>", SPINNER_FRAMES[frameIndex]);
+        m_icon->rebuild()->text(std::move(newText))->commence();
     } else if (m_quitSent != quitSent) {
         m_quitSent = quitSent;
         std::string newText;
         if (m_quitSent) {
-            newText = std::format("<span color='#F9E2AF'>{}</span> {}", SPINNER_FRAMES[frameIndex], m_rawClass);
+            newText = std::format("<span color='#F9E2AF'>{}</span>", SPINNER_FRAMES[frameIndex]);
         } else {
-            newText = std::format("<span color='#ffffff'>•</span> {}", m_rawClass);
+            if (m_isProcess) {
+                newText = "<span color='#7f849c'>•</span>";
+            } else {
+                newText = "<span color='#ffffff'>•</span>";
+            }
         }
-        m_class->rebuild()->text(std::move(newText))->commence();
+        m_icon->rebuild()->text(std::move(newText))->commence();
     }
 }
 
@@ -196,7 +273,15 @@ CMonitorState::CMonitorState(SP<Hyprtoolkit::IOutput> output) : m_monitorName(ou
 
     m_cancel = makeButton("Cancel", [](auto) { g_ui->exit(false); }, 8.F);
 
+    m_forceLayer = makeButton(
+        "Force layer",
+        [](auto) {
+            State::state()->forceCurrentStage();
+        },
+        8.F);
+
     m_buttonLayout->addChild(m_cancel);
+    m_buttonLayout->addChild(m_forceLayer);
     m_buttonLayout->addChild(m_forceQuit);
 
     m_window->m_rootElement->addChild(m_bg);
@@ -234,11 +319,11 @@ void CMonitorState::update() {
     }
 
     for (const auto& APP : APPS) {
-        if (APP->m_hidden) {
+        if (APP->m_hidden || APP->m_hasWindow) {
             continue;
         }
         bool inActiveStage = hasCurrentStage && State::state()->isAppInStage(*APP, currentStage) && APP->appAlive();
-        m_apps.emplace_back(makeUnique<SAppListApp>(APP->m_class, APP->m_title, inActiveStage));
+        m_apps.emplace_back(makeUnique<SAppListApp>(APP->m_class, APP->m_title, inActiveStage, APP->isProcess(), APP->isLayer()));
         m_appListLayout->addChild(m_apps.back()->m_null);
     }
 }
@@ -246,7 +331,7 @@ void CMonitorState::tickSpinners(int frameIndex) {
     const auto& APPS = State::state()->apps();
     size_t visibleAppCount = 0;
     for (const auto& APP : APPS) {
-        if (!APP->m_hidden) {
+        if (!APP->m_hidden && !APP->m_hasWindow) {
             visibleAppCount++;
         }
     }
@@ -265,7 +350,7 @@ void CMonitorState::tickSpinners(int frameIndex) {
 
     size_t uiIndex = 0;
     for (size_t i = 0; i < APPS.size(); ++i) {
-        if (APPS[i]->m_hidden) {
+        if (APPS[i]->m_hidden || APPS[i]->m_hasWindow) {
             continue;
         }
         bool inActiveStage = hasCurrentStage && State::state()->isAppInStage(*APPS[i], currentStage) && APPS[i]->appAlive();

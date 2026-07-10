@@ -90,9 +90,6 @@ void CApp::kill() {
 }
 
 bool CApp::appAlive() const {
-    if (m_pid <= 0)
-        return false;
-
     if (State::state()->m_dryRun && m_quitSent) {
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_quitTime).count() / 1000.F;
         float simulatedTime = 2.0F;
@@ -106,6 +103,13 @@ bool CApp::appAlive() const {
             return false;
         }
     }
+
+    if (!m_address.empty()) {
+        return m_windowPresent;
+    }
+
+    if (m_pid <= 0)
+        return false;
 
     if (::kill(m_pid, 0) == 0)
         return true;
@@ -293,6 +297,18 @@ bool CAppState::init() {
         return a->m_class < b->m_class;
     });
 
+    for (auto& app : m_apps) {
+        app->m_hasWindow = false;
+        if (app->isProcess()) {
+            for (const auto& other : m_apps) {
+                if (!other->isProcess() && other->m_pid == app->m_pid && other->m_pid > 0) {
+                    app->m_hasWindow = true;
+                    break;
+                }
+            }
+        }
+    }
+
     m_stageIndex = 0;
     m_stageStarted = std::chrono::steady_clock::now();
 
@@ -340,6 +356,12 @@ bool CAppState::updateState() {
 
     auto       table = jsonRaw->get_array();
 
+    for (auto& app : m_apps) {
+        if (!app->m_address.empty()) {
+            app->m_windowPresent = std::ranges::any_of(table, [&app](const auto& te) { return te == *app; });
+        }
+    }
+
     const auto BEFORE = m_apps.size();
 
     std::erase_if(m_apps, [&table](const auto& e) { return !e->appAlive() && !std::ranges::any_of(table, [&e](const auto& te) { return te == *e; }); });
@@ -385,6 +407,18 @@ bool CAppState::updateState() {
         }
     }
 
+    for (auto& app : m_apps) {
+        app->m_hasWindow = false;
+        if (app->isProcess()) {
+            for (const auto& other : m_apps) {
+                if (!other->isProcess() && other->m_pid == app->m_pid && other->m_pid > 0) {
+                    app->m_hasWindow = true;
+                    break;
+                }
+            }
+        }
+    }
+
     checkStageTransition();
 
     return BEFORE != m_apps.size();
@@ -412,6 +446,22 @@ void CAppState::reexitApps() const {
             a->quit();
         }
     }
+}
+
+void CAppState::forceCurrentStage() {
+    if (m_stages.empty() || m_stageIndex >= m_stages.size())
+        return;
+
+    const auto& currentStage = m_stages[m_stageIndex];
+    g_logger->log(LOG_DEBUG, "Forcing stage: {}", stageName(currentStage));
+    for (const auto& app : m_apps) {
+        if (app->appAlive() && isAppInStage(*app, currentStage)) {
+            if (!m_dryRun) {
+                app->kill();
+            }
+        }
+    }
+    advanceStage();
 }
 
 static inline std::string localTrim(std::string_view str) {
@@ -605,6 +655,33 @@ void CAppState::loadConfig() {
                 m_systemdUserExit = (block.keyValues.at("systemd_user_exit") == "true" || block.keyValues.at("systemd_user_exit") == "1");
                 g_logger->log(LOG_DEBUG, "Config: systemd_user_exit set to {}", m_systemdUserExit);
             }
+        } else if (block.name == "general") {
+            if (block.keyValues.contains("line_color")) {
+                m_lineColor = block.keyValues.at("line_color");
+                g_logger->log(LOG_DEBUG, "Config: line_color set to {}", m_lineColor);
+            }
+            if (block.keyValues.contains("row_margin")) {
+                std::string marginVal = block.keyValues.at("row_margin");
+                try {
+                    m_rowMargin = std::stoi(marginVal);
+                } catch (...) {
+                    g_logger->log(LOG_ERR, "Config error: invalid row_margin: '{}'", marginVal);
+                }
+                g_logger->log(LOG_DEBUG, "Config: row_margin set to {}", m_rowMargin);
+            }
+            if (block.keyValues.contains("line_width")) {
+                std::string widthVal = block.keyValues.at("line_width");
+                try {
+                    m_lineWidth = std::stoi(widthVal);
+                } catch (...) {
+                    g_logger->log(LOG_ERR, "Config error: invalid line_width: '{}'", widthVal);
+                }
+                g_logger->log(LOG_DEBUG, "Config: line_width set to {}", m_lineWidth);
+            }
+            if (block.keyValues.contains("hide_processes")) {
+                m_hideProcesses = (block.keyValues.at("hide_processes") == "true" || block.keyValues.at("hide_processes") == "1");
+                g_logger->log(LOG_DEBUG, "Config: hide_processes set to {}", m_hideProcesses);
+            }
         } else if (block.name == "default") {
             if (block.keyValues.contains("timeout")) {
                 std::string timeoutVal = block.keyValues.at("timeout");
@@ -644,7 +721,7 @@ void CAppState::loadConfig() {
                 continue;
             }
 
-            bool layerHidden = false;
+            std::optional<bool> layerHidden;
             if (block.keyValues.contains("hidden")) {
                 layerHidden = (block.keyValues.at("hidden") == "true" || block.keyValues.at("hidden") == "1");
             } else if (block.keyValues.contains("hide")) {
@@ -655,7 +732,9 @@ void CAppState::loadConfig() {
                 SShutdownRule rule;
                 rule.layer = layerNum;
                 rule.forceTimeout = m_defaultForceTimeout;
-                rule.hidden = layerHidden;
+                if (layerHidden.has_value()) {
+                    rule.hidden = layerHidden;
+                }
 
                 if (sub.keyValues.contains("hidden")) {
                     rule.hidden = (sub.keyValues.at("hidden") == "true" || sub.keyValues.at("hidden") == "1");
@@ -733,6 +812,9 @@ void CAppState::classifyApp(CApp& app) {
     }
     app.m_forceTimeout = m_defaultForceTimeout;
     app.m_hidden = m_defaultHidden;
+    if (app.isProcess() && m_hideProcesses) {
+        app.m_hidden = true;
+    }
 
     for (const auto& rule : m_rules) {
         if (matchRule(app, rule)) {
@@ -743,7 +825,9 @@ void CAppState::classifyApp(CApp& app) {
             }
             app.m_layer = rule.layer;
             app.m_forceTimeout = rule.forceTimeout;
-            app.m_hidden = rule.hidden;
+            if (rule.hidden.has_value()) {
+                app.m_hidden = rule.hidden.value();
+            }
             break;
         }
     }
