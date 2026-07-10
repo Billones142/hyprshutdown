@@ -49,7 +49,10 @@ namespace {
 CUI::CUI()  = default;
 CUI::~CUI() = default;
 
-CMonitorState::SAppListApp::SAppListApp(const std::string_view& clazz, const std::string_view& title) {
+CMonitorState::SAppListApp::SAppListApp(const std::string_view& clazz, const std::string_view& title, bool quitSent) {
+    m_rawClass = clazz;
+    m_quitSent = quitSent;
+
     m_null = Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1.F, 1.F}})->commence();
     m_null->setMargin(4);
     m_layout =
@@ -61,8 +64,15 @@ CMonitorState::SAppListApp::SAppListApp(const std::string_view& clazz, const std
                   ->fontSize(Hyprtoolkit::CFontSize{Hyprtoolkit::CFontSize::HT_FONT_TEXT})
                   ->commence();
 
+    std::string classText;
+    if (quitSent) {
+        classText = std::format("<span color='#F9E2AF'>⠋</span> {}", clazz);
+    } else {
+        classText = std::format("<span color='#ffffff'>•</span> {}", clazz);
+    }
+
     m_class = Hyprtoolkit::CTextBuilder::begin()
-                  ->text(std::string{clazz})
+                  ->text(std::move(classText))
                   ->color([] { return g_ui->backend()->getPalette()->m_colors.text; })
                   ->fontSize(Hyprtoolkit::CFontSize{Hyprtoolkit::CFontSize::HT_FONT_H3})
                   ->commence();
@@ -85,6 +95,26 @@ CMonitorState::SAppListApp::SAppListApp(const std::string_view& clazz, const std
     m_layout->addChild(m_titleNull);
 
     m_null->addChild(m_layout);
+}
+
+void CMonitorState::SAppListApp::updateText(bool quitSent, int frameIndex) {
+    static const std::vector<std::string> SPINNER_FRAMES = {
+        "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"
+    };
+
+    if (m_quitSent == quitSent && quitSent) {
+        std::string newText = std::format("<span color='#F9E2AF'>{}</span> {}", SPINNER_FRAMES[frameIndex], m_rawClass);
+        m_class->rebuild()->text(std::move(newText))->commence();
+    } else if (m_quitSent != quitSent) {
+        m_quitSent = quitSent;
+        std::string newText;
+        if (m_quitSent) {
+            newText = std::format("<span color='#F9E2AF'>{}</span> {}", SPINNER_FRAMES[frameIndex], m_rawClass);
+        } else {
+            newText = std::format("<span color='#ffffff'>•</span> {}", m_rawClass);
+        }
+        m_class->rebuild()->text(std::move(newText))->commence();
+    }
 }
 
 CMonitorState::CMonitorState(SP<Hyprtoolkit::IOutput> output) : m_monitorName(output->port()) {
@@ -196,9 +226,37 @@ void CMonitorState::update() {
 
     const auto& APPS = State::state()->apps();
 
+    bool hasCurrentStage = false;
+    State::SShutdownStage currentStage;
+    if (State::state()->m_stageIndex < State::state()->m_stages.size()) {
+        currentStage = State::state()->m_stages[State::state()->m_stageIndex];
+        hasCurrentStage = true;
+    }
+
     for (const auto& APP : APPS) {
-        m_apps.emplace_back(makeUnique<SAppListApp>(APP->m_class, APP->m_title));
+        bool inActiveStage = hasCurrentStage && State::state()->isAppInStage(*APP, currentStage) && APP->appAlive();
+        m_apps.emplace_back(makeUnique<SAppListApp>(APP->m_class, APP->m_title, inActiveStage));
         m_appListLayout->addChild(m_apps.back()->m_null);
+    }
+}
+
+void CMonitorState::tickSpinners(int frameIndex) {
+    const auto& APPS = State::state()->apps();
+    if (APPS.size() != m_apps.size()) {
+        update();
+        return;
+    }
+
+    bool hasCurrentStage = false;
+    State::SShutdownStage currentStage;
+    if (State::state()->m_stageIndex < State::state()->m_stages.size()) {
+        currentStage = State::state()->m_stages[State::state()->m_stageIndex];
+        hasCurrentStage = true;
+    }
+
+    for (size_t i = 0; i < APPS.size(); ++i) {
+        bool inActiveStage = hasCurrentStage && State::state()->isAppInStage(*APPS[i], currentStage) && APPS[i]->appAlive();
+        m_apps[i]->updateText(inActiveStage, frameIndex);
     }
 }
 
@@ -218,6 +276,10 @@ void CUI::exit(bool closeHl) {
             //NOLINTNEXTLINE
             std::string cmd = State::state()->m_useLua ? "/dispatch hl.dsp.exit()" : "/dispatch exit";
             HyprlandIPC::getFromSocket(cmd);
+            if (State::state()->m_systemdUserExit) {
+                CProcess proc("/bin/sh", {"-c", "systemctl --user exit"});
+                proc.runAsync();
+            }
             if (m_postExitCmd) {
                 CProcess proc("/bin/sh", {"-c", m_postExitCmd.value()});
                 proc.runAsync();
@@ -247,13 +309,11 @@ void CUI::setTimer() {
                 State::state()->reexitApps();
             }
 
-            if (!State::state()->updateState()) {
-                setTimer();
-                return; // no changes
-            }
+            m_spinnerFrame = (m_spinnerFrame + 1) % 10;
+            State::state()->updateState();
 
             for (const auto& s : m_states) {
-                s->update();
+                s->tickSpinners(m_spinnerFrame);
             }
 
             setTimer();

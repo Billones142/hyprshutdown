@@ -27,6 +27,7 @@ class CMonitorState {
     CMonitorState(CMonitorState&&)      = delete;
 
     void        update();
+    void        tickSpinners(int frameIndex);
 
     std::string m_monitorName;
 
@@ -48,7 +49,11 @@ class CMonitorState {
     SP<Hyprtoolkit::CColumnLayoutElement> m_appListLayout;
 
     struct SAppListApp {
-        SAppListApp(const std::string_view& clazz, const std::string_view& title);
+        SAppListApp(const std::string_view& clazz, const std::string_view& title, bool quitSent);
+        void updateText(bool quitSent, int frameIndex);
+
+        std::string m_rawClass;
+        bool m_quitSent;
 
         SP<Hyprtoolkit::CNullElement>         m_null, m_titleNull, m_classNull;
         SP<Hyprtoolkit::CColumnLayoutElement> m_layout;
@@ -79,6 +84,7 @@ class CUI {
 
     SP<Hyprtoolkit::IBackend>      m_backend;
     ASP<Hyprtoolkit::CTimer>       m_updateTimer;
+    int                            m_spinnerFrame = 0;
 
     std::vector<UP<CMonitorState>> m_states;
 
