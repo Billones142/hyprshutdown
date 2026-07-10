@@ -598,6 +598,7 @@ void CAppState::loadConfig() {
     // Process blocks
     m_rules.clear();
     m_defaultLayer = -1;
+    m_defaultHidden = false;
     for (const auto& block : topBlocks) {
         if (block.name == "global") {
             if (block.keyValues.contains("systemd_user_exit")) {
@@ -627,6 +628,13 @@ void CAppState::loadConfig() {
                 }
                 g_logger->log(LOG_DEBUG, "Config: default layer set to {}", m_defaultLayer);
             }
+            if (block.keyValues.contains("hidden")) {
+                m_defaultHidden = (block.keyValues.at("hidden") == "true" || block.keyValues.at("hidden") == "1");
+                g_logger->log(LOG_DEBUG, "Config: default hidden set to {}", m_defaultHidden);
+            } else if (block.keyValues.contains("hide")) {
+                m_defaultHidden = (block.keyValues.at("hide") == "true" || block.keyValues.at("hide") == "1");
+                g_logger->log(LOG_DEBUG, "Config: default hidden set to {}", m_defaultHidden);
+            }
         } else if (block.name.starts_with("layer_")) {
             int layerNum = 1;
             try {
@@ -636,10 +644,24 @@ void CAppState::loadConfig() {
                 continue;
             }
 
+            bool layerHidden = false;
+            if (block.keyValues.contains("hidden")) {
+                layerHidden = (block.keyValues.at("hidden") == "true" || block.keyValues.at("hidden") == "1");
+            } else if (block.keyValues.contains("hide")) {
+                layerHidden = (block.keyValues.at("hide") == "true" || block.keyValues.at("hide") == "1");
+            }
+
             for (const auto& sub : block.subBlocks) {
                 SShutdownRule rule;
                 rule.layer = layerNum;
                 rule.forceTimeout = m_defaultForceTimeout;
+                rule.hidden = layerHidden;
+
+                if (sub.keyValues.contains("hidden")) {
+                    rule.hidden = (sub.keyValues.at("hidden") == "true" || sub.keyValues.at("hidden") == "1");
+                } else if (sub.keyValues.contains("hide")) {
+                    rule.hidden = (sub.keyValues.at("hide") == "true" || sub.keyValues.at("hide") == "1");
+                }
 
                 if (sub.keyValues.contains("timeout")) {
                     std::string timeoutVal = sub.keyValues.at("timeout");
@@ -710,6 +732,7 @@ void CAppState::classifyApp(CApp& app) {
         app.m_layer = 0;
     }
     app.m_forceTimeout = m_defaultForceTimeout;
+    app.m_hidden = m_defaultHidden;
 
     for (const auto& rule : m_rules) {
         if (matchRule(app, rule)) {
@@ -720,6 +743,7 @@ void CAppState::classifyApp(CApp& app) {
             }
             app.m_layer = rule.layer;
             app.m_forceTimeout = rule.forceTimeout;
+            app.m_hidden = rule.hidden;
             break;
         }
     }

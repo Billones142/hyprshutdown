@@ -234,15 +234,24 @@ void CMonitorState::update() {
     }
 
     for (const auto& APP : APPS) {
+        if (APP->m_hidden) {
+            continue;
+        }
         bool inActiveStage = hasCurrentStage && State::state()->isAppInStage(*APP, currentStage) && APP->appAlive();
         m_apps.emplace_back(makeUnique<SAppListApp>(APP->m_class, APP->m_title, inActiveStage));
         m_appListLayout->addChild(m_apps.back()->m_null);
     }
 }
-
 void CMonitorState::tickSpinners(int frameIndex) {
     const auto& APPS = State::state()->apps();
-    if (APPS.size() != m_apps.size()) {
+    size_t visibleAppCount = 0;
+    for (const auto& APP : APPS) {
+        if (!APP->m_hidden) {
+            visibleAppCount++;
+        }
+    }
+
+    if (visibleAppCount != m_apps.size()) {
         update();
         return;
     }
@@ -254,9 +263,14 @@ void CMonitorState::tickSpinners(int frameIndex) {
         hasCurrentStage = true;
     }
 
+    size_t uiIndex = 0;
     for (size_t i = 0; i < APPS.size(); ++i) {
+        if (APPS[i]->m_hidden) {
+            continue;
+        }
         bool inActiveStage = hasCurrentStage && State::state()->isAppInStage(*APPS[i], currentStage) && APPS[i]->appAlive();
-        m_apps[i]->updateText(inActiveStage, frameIndex);
+        m_apps[uiIndex]->updateText(inActiveStage, frameIndex);
+        uiIndex++;
     }
 }
 

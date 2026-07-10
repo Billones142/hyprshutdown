@@ -52,6 +52,7 @@ namespace State {
         bool hasPath = false;
         bool hasUser = false;
         bool hasPid = false;
+        bool hidden = false;
     };
     class CApp {
       public:
@@ -80,6 +81,7 @@ namespace State {
         int          m_layer        = 0;
         float        m_forceTimeout = -1.0F;
         std::chrono::steady_clock::time_point m_quitTime;
+        bool         m_hidden = false;
     };
 
     class CAppState {
@@ -110,6 +112,7 @@ namespace State {
         bool                         m_systemdUserExit = false;
         float                        m_defaultForceTimeout = 5.0F;
         int                          m_defaultLayer = -1;
+        bool                         m_defaultHidden = false;
 
         std::vector<SShutdownStage> m_stages;
         size_t                      m_stageIndex = 0;
