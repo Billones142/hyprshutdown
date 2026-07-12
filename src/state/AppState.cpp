@@ -665,12 +665,7 @@ void CAppState::loadConfig() {
     m_defaultLayer = -1;
     m_defaultHidden = false;
     for (const auto& block : topBlocks) {
-        if (block.name == "global") {
-            if (block.keyValues.contains("systemd_user_exit")) {
-                m_systemdUserExit = (block.keyValues.at("systemd_user_exit") == "true" || block.keyValues.at("systemd_user_exit") == "1");
-                g_logger->log(LOG_DEBUG, "Config: systemd_user_exit set to {}", m_systemdUserExit);
-            }
-        } else if (block.name == "general") {
+        if (block.name == "general") {
             if (block.keyValues.contains("line_color")) {
                 m_lineColor = block.keyValues.at("line_color");
                 g_logger->log(LOG_DEBUG, "Config: line_color set to {}", m_lineColor);
@@ -696,6 +691,10 @@ void CAppState::loadConfig() {
             if (block.keyValues.contains("hide_processes")) {
                 m_hideProcesses = (block.keyValues.at("hide_processes") == "true" || block.keyValues.at("hide_processes") == "1");
                 g_logger->log(LOG_DEBUG, "Config: hide_processes set to {}", m_hideProcesses);
+            }
+            if (block.keyValues.contains("systemd_user_exit")) {
+                m_systemdUserExit = (block.keyValues.at("systemd_user_exit") == "true" || block.keyValues.at("systemd_user_exit") == "1");
+                g_logger->log(LOG_DEBUG, "Config: systemd_user_exit set to {}", m_systemdUserExit);
             }
         } else if (block.name == "default") {
             if (block.keyValues.contains("timeout")) {
