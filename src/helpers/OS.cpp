@@ -51,9 +51,9 @@ static std::optional<std::string> linuxExtractFromStatus(std::ifstream& ifs, con
 
 std::string OS::appNameForPid(int64_t pid) {
 #if defined(KERN_PROC_PID)
-    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, Hyprutils::Memory::sc<int>(pid)};
+    int        mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, Hyprutils::Memory::sc<int>(pid)};
     KINFO_PROC kp;
-    size_t len = sizeof(kp);
+    size_t     len = sizeof(kp);
 
     if (sysctl(mib, 4, &kp, &len, nullptr, 0) == -1)
         return "";
@@ -71,7 +71,7 @@ std::string OS::appNameForPid(int64_t pid) {
     if (!ifs.good())
         return "";
 
-    auto data = linuxExtractFromStatus(ifs, "Name");
+    auto        data = linuxExtractFromStatus(ifs, "Name");
     std::string name = data.value_or("");
 
     return name;
@@ -153,7 +153,7 @@ int64_t OS::ppidOf(int64_t pid) {
 
 std::string OS::exePathForPid(int64_t pid) {
     std::error_code ec;
-    auto path = std::filesystem::read_symlink("/proc/" + std::to_string(pid) + "/exe", ec);
+    auto            path = std::filesystem::read_symlink("/proc/" + std::to_string(pid) + "/exe", ec);
     if (ec)
         return "";
     std::string pathStr = path.string();

@@ -49,19 +49,19 @@ class CMonitorState {
     SP<Hyprtoolkit::CColumnLayoutElement> m_appListLayout;
     struct SAppListApp {
         SAppListApp(const std::string_view& clazz, const std::string_view& title, bool quitSent, bool isProcess, bool isLayer);
-        void updateText(bool quitSent, int frameIndex);
+        void                               updateText(bool quitSent, int frameIndex);
 
-        std::string m_rawClass;
-        bool m_quitSent;
-        bool m_isProcess = false;
-        bool m_isLayer = false;
+        std::string                        m_rawClass;
+        bool                               m_quitSent;
+        bool                               m_isProcess = false;
+        bool                               m_isLayer   = false;
 
-        SP<Hyprtoolkit::CNullElement>         m_null, m_iconNull, m_lineNull, m_layout;
-        SP<Hyprtoolkit::CRowLayoutElement>    m_rowLayout;
-        SP<Hyprtoolkit::CTextElement>         m_title;
-        SP<Hyprtoolkit::CTextElement>         m_class;
-        SP<Hyprtoolkit::CRectangleElement>    m_line;
-        SP<Hyprtoolkit::CTextElement>         m_icon;
+        SP<Hyprtoolkit::CNullElement>      m_null, m_iconNull, m_lineNull, m_layout;
+        SP<Hyprtoolkit::CRowLayoutElement> m_rowLayout;
+        SP<Hyprtoolkit::CTextElement>      m_title;
+        SP<Hyprtoolkit::CTextElement>      m_class;
+        SP<Hyprtoolkit::CRectangleElement> m_line;
+        SP<Hyprtoolkit::CTextElement>      m_icon;
     };
 
     std::vector<UP<SAppListApp>> m_apps;

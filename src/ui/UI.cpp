@@ -72,24 +72,22 @@ static Hyprtoolkit::CHyprColor parseColor(std::string str, const Hyprtoolkit::CH
             float b = (val & 0xff) / 255.f;
             return Hyprtoolkit::CHyprColor{r, g, b, a};
         }
-    } catch (...) {
-        return fallback;
-    }
+    } catch (...) { return fallback; }
 }
 
 CMonitorState::SAppListApp::SAppListApp(const std::string_view& clazz, const std::string_view& title, bool quitSent, bool isProcess, bool isLayer) {
-    m_rawClass = clazz;
-    m_quitSent = quitSent;
+    m_rawClass  = clazz;
+    m_quitSent  = quitSent;
     m_isProcess = isProcess;
-    m_isLayer = isLayer;
+    m_isLayer   = isLayer;
 
     m_null = Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1.F, 1.F}})->commence();
     m_null->setMargin(State::state()->m_rowMargin);
 
-    m_rowLayout = Hyprtoolkit::CRowLayoutBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1.F, 1.F}})->gap(8)->commence();
+    m_rowLayout =
+        Hyprtoolkit::CRowLayoutBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1.F, 1.F}})->gap(8)->commence();
 
-    m_layout =
-        Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1.F, 1.F}})->commence();
+    m_layout = Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, Hyprtoolkit::CDynamicSize::HT_SIZE_AUTO, {1.F, 1.F}})->commence();
 
     std::string titleColor = isProcess ? "#7f849c" : "#ffffff";
     std::string classText;
@@ -130,9 +128,9 @@ CMonitorState::SAppListApp::SAppListApp(const std::string_view& clazz, const std
 
     if (State::state()->m_lineWidth > 0) {
         m_line = Hyprtoolkit::CRectangleBuilder::begin()
-                    ->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_ABSOLUTE, {1.F, (float)State::state()->m_lineWidth}})
-                    ->color([] { return parseColor(State::state()->m_lineColor, g_ui->backend()->getPalette()->m_colors.text); })
-                    ->commence();
+                     ->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_ABSOLUTE, {1.F, (float)State::state()->m_lineWidth}})
+                     ->color([] { return parseColor(State::state()->m_lineColor, g_ui->backend()->getPalette()->m_colors.text); })
+                     ->commence();
         m_line->setPositionMode(Hyprtoolkit::IElement::HT_POSITION_ABSOLUTE);
         m_line->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_LEFT, true);
         m_line->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_RIGHT, true);
@@ -171,9 +169,7 @@ CMonitorState::SAppListApp::SAppListApp(const std::string_view& clazz, const std
 }
 
 void CMonitorState::SAppListApp::updateText(bool quitSent, int frameIndex) {
-    static const std::vector<std::string> SPINNER_FRAMES = {
-        "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"
-    };
+    static const std::vector<std::string> SPINNER_FRAMES = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
 
     if (m_quitSent == quitSent && quitSent) {
         std::string newText = std::format("<span color='#F9E2AF'>{}</span>", SPINNER_FRAMES[frameIndex]);
@@ -273,12 +269,7 @@ CMonitorState::CMonitorState(SP<Hyprtoolkit::IOutput> output) : m_monitorName(ou
 
     m_cancel = makeButton("Cancel", [](auto) { g_ui->exit(false); }, 8.F);
 
-    m_forceLayer = makeButton(
-        "Force layer",
-        [](auto) {
-            State::state()->forceCurrentStage();
-        },
-        8.F);
+    m_forceLayer = makeButton("Force layer", [](auto) { State::state()->forceCurrentStage(); }, 8.F);
 
     m_buttonLayout->addChild(m_cancel);
     m_buttonLayout->addChild(m_forceLayer);
@@ -309,34 +300,35 @@ void CMonitorState::update() {
     m_apps.clear();
     m_appListLayout->clearChildren();
 
-    const auto& APPS = State::state()->apps();
+    const auto&           APPS = State::state()->apps();
 
-    bool hasCurrentStage = false;
+    bool                  hasCurrentStage = false;
     State::SShutdownStage currentStage;
     if (State::state()->m_stageIndex < State::state()->m_stages.size()) {
-        currentStage = State::state()->m_stages[State::state()->m_stageIndex];
+        currentStage    = State::state()->m_stages[State::state()->m_stageIndex];
         hasCurrentStage = true;
     }
 
-    State::SShutdownStage lastStage = { (State::EAppCategory)-1, -1 };
-    bool first = true;
+    State::SShutdownStage lastStage = {(State::EAppCategory)-1, -1};
+    bool                  first     = true;
 
     for (const auto& APP : APPS) {
         if (APP->m_hidden || APP->m_hasWindow) {
             continue;
         }
 
-        State::SShutdownStage appStage = { APP->m_category, APP->m_layer };
+        State::SShutdownStage appStage = {APP->m_category, APP->m_layer};
         if (!first && (appStage.category != lastStage.category || appStage.layer != lastStage.layer)) {
-            auto dividerNull = Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_ABSOLUTE, {1.F, 24.F}})->commence();
+            auto dividerNull =
+                Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_ABSOLUTE, {1.F, 24.F}})->commence();
             auto dividerLine = Hyprtoolkit::CRectangleBuilder::begin()
-                                ->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_ABSOLUTE, {1.F, 1.F}})
-                                ->color([] { 
-                                    auto col = parseColor(State::state()->m_lineColor, g_ui->backend()->getPalette()->m_colors.text); 
-                                    col.a *= 0.25F; 
-                                    return col;
-                                })
-                                ->commence();
+                                   ->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_ABSOLUTE, {1.F, 1.F}})
+                                   ->color([] {
+                                       auto col = parseColor(State::state()->m_lineColor, g_ui->backend()->getPalette()->m_colors.text);
+                                       col.a *= 0.25F;
+                                       return col;
+                                   })
+                                   ->commence();
             dividerLine->setPositionMode(Hyprtoolkit::IElement::HT_POSITION_ABSOLUTE);
             dividerLine->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_LEFT, true);
             dividerLine->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_RIGHT, true);
@@ -346,7 +338,7 @@ void CMonitorState::update() {
         }
 
         lastStage = appStage;
-        first = false;
+        first     = false;
 
         bool inActiveStage = hasCurrentStage && State::state()->isAppInStage(*APP, currentStage) && APP->appAlive();
         m_apps.emplace_back(makeUnique<SAppListApp>(APP->m_class, APP->m_title, inActiveStage, APP->isProcess(), APP->isLayer()));
@@ -354,8 +346,8 @@ void CMonitorState::update() {
     }
 }
 void CMonitorState::tickSpinners(int frameIndex) {
-    const auto& APPS = State::state()->apps();
-    size_t visibleAppCount = 0;
+    const auto& APPS            = State::state()->apps();
+    size_t      visibleAppCount = 0;
     for (const auto& APP : APPS) {
         if (!APP->m_hidden && !APP->m_hasWindow) {
             visibleAppCount++;
@@ -367,10 +359,10 @@ void CMonitorState::tickSpinners(int frameIndex) {
         return;
     }
 
-    bool hasCurrentStage = false;
+    bool                  hasCurrentStage = false;
     State::SShutdownStage currentStage;
     if (State::state()->m_stageIndex < State::state()->m_stages.size()) {
-        currentStage = State::state()->m_stages[State::state()->m_stageIndex];
+        currentStage    = State::state()->m_stages[State::state()->m_stageIndex];
         hasCurrentStage = true;
     }
 
@@ -400,7 +392,10 @@ void CUI::exit(bool closeHl) {
         if (closeHl && !m_noExit && !State::state()->m_dryRun) {
             //NOLINTNEXTLINE
             std::string cmd = State::state()->m_useLua ? "/dispatch hl.dsp.exit()" : "/dispatch exit";
-            HyprlandIPC::getFromSocket(cmd);
+            const auto RET = HyprlandIPC::getFromSocket(cmd);
+            if (!RET) {
+                g_logger->log(LOG_ERR, "Failed to exit Hyprland: {}", RET.error());
+            }
             if (State::state()->m_systemdUserExit) {
                 CProcess proc("/bin/sh", {"-c", "systemctl --user exit"});
                 proc.runAsync();

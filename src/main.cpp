@@ -104,7 +104,7 @@ int main(int argc, const char** argv, const char** envp) {
     if (vtSwitch && *vtSwitch > 0 && !State::state()->m_dryRun) {
         g_logger->log(LOG_DEBUG, "Switching to VT{}", *vtSwitch);
         std::string cmd = std::format("sudo -n chvt {}", *vtSwitch);
-        CProcess proc("/bin/sh", {"-c", cmd});
+        CProcess    proc("/bin/sh", {"-c", cmd});
         proc.runAsync();
     }
 

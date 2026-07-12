@@ -91,7 +91,7 @@ void CApp::kill() {
 
 bool CApp::appAlive() const {
     if (State::state()->m_dryRun && m_quitSent) {
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_quitTime).count() / 1000.F;
+        auto  elapsed       = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_quitTime).count() / 1000.F;
         float simulatedTime = 2.0F;
         if (m_forceTimeout >= 0.F) {
             simulatedTime = m_forceTimeout;
@@ -136,7 +136,7 @@ bool CAppState::init() {
             auto jsonRaw = glz::read_json<glz::generic>(*RET);
             if (jsonRaw && jsonRaw->get_object().contains("configProvider")) {
                 std::string provider = jsonRaw->get_object()["configProvider"].get_string();
-                m_useLua = (provider == "lua");
+                m_useLua             = (provider == "lua");
                 g_logger->log(LOG_DEBUG, "Detected config provider: {}", m_useLua ? "lua" : "hyprlang");
             }
         }
@@ -249,7 +249,7 @@ bool CAppState::init() {
     // Determine the unique stages present
     std::vector<int> firstLayers;
     std::vector<int> lastLayers;
-    bool hasNormal = false;
+    bool             hasNormal = false;
 
     for (const auto& app : m_apps) {
         if (app->m_category == EAppCategory::FIRST) {
@@ -324,7 +324,7 @@ bool CAppState::init() {
         }
     }
 
-    m_stageIndex = 0;
+    m_stageIndex   = 0;
     m_stageStarted = std::chrono::steady_clock::now();
 
     g_logger->log(LOG_DEBUG, "Initialized {} shutdown stages", m_stages.size());
@@ -369,7 +369,7 @@ bool CAppState::updateState() {
         return false;
     }
 
-    auto       table = jsonRaw->get_array();
+    auto table = jsonRaw->get_array();
 
     for (auto& app : m_apps) {
         if (!app->m_address.empty()) {
@@ -525,7 +525,7 @@ void CAppState::loadConfig() {
     std::vector<std::string> tokens;
     {
         std::string current;
-        bool inQuote = false;
+        bool        inQuote = false;
         for (size_t i = 0; i < content.size(); ++i) {
             char c = content[i];
             if (inQuote) {
@@ -564,7 +564,7 @@ void CAppState::loadConfig() {
                     while (i < content.size() && content[i] != '\n') {
                         i++;
                     }
-                } else if (c == '/' && i + 1 < content.size() && content[i+1] == '/') {
+                } else if (c == '/' && i + 1 < content.size() && content[i + 1] == '/') {
                     if (!current.empty()) {
                         tokens.push_back(current);
                         current.clear();
@@ -582,13 +582,11 @@ void CAppState::loadConfig() {
         }
     }
 
-
-
     // Block structure
     struct SBlock {
-        std::string name;
+        std::string                                  name;
         std::unordered_map<std::string, std::string> keyValues;
-        std::vector<SBlock> subBlocks;
+        std::vector<SBlock>                          subBlocks;
     };
 
     auto parseBlockHelper = [](auto& self, const std::vector<std::string>& tokens, size_t& idx) -> SBlock {
@@ -603,7 +601,7 @@ void CAppState::loadConfig() {
                 std::string subName = tokens[idx];
                 idx += 2; // Consume Name and '{'
                 SBlock sub = self(self, tokens, idx);
-                sub.name = subName;
+                sub.name   = subName;
                 block.subBlocks.push_back(std::move(sub));
             } else if (idx + 1 < tokens.size() && tokens[idx + 1] == "=") {
                 std::string key = tokens[idx];
@@ -632,7 +630,7 @@ void CAppState::loadConfig() {
                 std::string blockName = tokens[idx];
                 idx += 2; // Consume Name and '{'
                 SBlock top = parseBlockHelper(parseBlockHelper, tokens, idx);
-                top.name = blockName;
+                top.name   = blockName;
                 topBlocks.push_back(std::move(top));
             } else if (idx + 1 < tokens.size() && tokens[idx + 1] == "=") {
                 // Top-level key-values (global settings)
@@ -658,11 +656,9 @@ void CAppState::loadConfig() {
         }
     }
 
-
-
     // Process blocks
     m_rules.clear();
-    m_defaultLayer = -1;
+    m_defaultLayer  = -1;
     m_defaultHidden = false;
     for (const auto& block : topBlocks) {
         if (block.name == "general") {
@@ -674,18 +670,14 @@ void CAppState::loadConfig() {
                 std::string marginVal = block.keyValues.at("row_margin");
                 try {
                     m_rowMargin = std::stoi(marginVal);
-                } catch (...) {
-                    g_logger->log(LOG_ERR, "Config error: invalid row_margin: '{}'", marginVal);
-                }
+                } catch (...) { g_logger->log(LOG_ERR, "Config error: invalid row_margin: '{}'", marginVal); }
                 g_logger->log(LOG_DEBUG, "Config: row_margin set to {}", m_rowMargin);
             }
             if (block.keyValues.contains("line_width")) {
                 std::string widthVal = block.keyValues.at("line_width");
                 try {
                     m_lineWidth = std::stoi(widthVal);
-                } catch (...) {
-                    g_logger->log(LOG_ERR, "Config error: invalid line_width: '{}'", widthVal);
-                }
+                } catch (...) { g_logger->log(LOG_ERR, "Config error: invalid line_width: '{}'", widthVal); }
                 g_logger->log(LOG_DEBUG, "Config: line_width set to {}", m_lineWidth);
             }
             if (block.keyValues.contains("hide_processes")) {
@@ -704,9 +696,7 @@ void CAppState::loadConfig() {
                 } else {
                     try {
                         m_defaultForceTimeout = std::stof(timeoutVal);
-                    } catch (...) {
-                        g_logger->log(LOG_ERR, "Config error: invalid default timeout: '{}'", timeoutVal);
-                    }
+                    } catch (...) { g_logger->log(LOG_ERR, "Config error: invalid default timeout: '{}'", timeoutVal); }
                 }
                 g_logger->log(LOG_DEBUG, "Config: default force timeout set to {}", m_defaultForceTimeout);
             }
@@ -714,9 +704,7 @@ void CAppState::loadConfig() {
                 std::string layerVal = block.keyValues.at("layer");
                 try {
                     m_defaultLayer = std::stoi(layerVal);
-                } catch (...) {
-                    g_logger->log(LOG_ERR, "Config error: invalid default layer: '{}'", layerVal);
-                }
+                } catch (...) { g_logger->log(LOG_ERR, "Config error: invalid default layer: '{}'", layerVal); }
                 g_logger->log(LOG_DEBUG, "Config: default layer set to {}", m_defaultLayer);
             }
             if (block.keyValues.contains("hidden")) {
@@ -744,7 +732,7 @@ void CAppState::loadConfig() {
 
             for (const auto& sub : block.subBlocks) {
                 SShutdownRule rule;
-                rule.layer = layerNum;
+                rule.layer        = layerNum;
                 rule.forceTimeout = m_defaultForceTimeout;
                 if (layerHidden.has_value()) {
                     rule.hidden = layerHidden;
@@ -763,9 +751,7 @@ void CAppState::loadConfig() {
                     } else {
                         try {
                             rule.forceTimeout = std::stof(timeoutVal);
-                        } catch (...) {
-                            g_logger->log(LOG_ERR, "Config error: invalid timeout in sub-block '{}': '{}'", sub.name, timeoutVal);
-                        }
+                        } catch (...) { g_logger->log(LOG_ERR, "Config error: invalid timeout in sub-block '{}': '{}'", sub.name, timeoutVal); }
                     }
                 }
 
@@ -773,10 +759,8 @@ void CAppState::loadConfig() {
                     patternOut = pattern;
                     try {
                         regexOut = std::regex(pattern, std::regex_constants::ECMAScript | std::regex_constants::nosubs);
-                        flagOut = true;
-                    } catch (const std::regex_error& e) {
-                        g_logger->log(LOG_ERR, "Config error: invalid regex '{}': {}", pattern, e.what());
-                    }
+                        flagOut  = true;
+                    } catch (const std::regex_error& e) { g_logger->log(LOG_ERR, "Config error: invalid regex '{}': {}", pattern, e.what()); }
                 };
 
                 if (sub.keyValues.contains("class")) {
@@ -816,16 +800,16 @@ void CAppState::loadConfig() {
 void CAppState::classifyApp(CApp& app) {
     if (m_defaultLayer == 0) {
         app.m_category = EAppCategory::LAST;
-        app.m_layer = 0;
+        app.m_layer    = 0;
     } else if (m_defaultLayer > 0) {
         app.m_category = EAppCategory::FIRST;
-        app.m_layer = m_defaultLayer;
+        app.m_layer    = m_defaultLayer;
     } else {
         app.m_category = EAppCategory::NORMAL;
-        app.m_layer = 0;
+        app.m_layer    = 0;
     }
     app.m_forceTimeout = m_defaultForceTimeout;
-    app.m_hidden = m_defaultHidden;
+    app.m_hidden       = m_defaultHidden;
     if (app.isProcess() && m_hideProcesses) {
         app.m_hidden = true;
     }
@@ -837,7 +821,7 @@ void CAppState::classifyApp(CApp& app) {
             } else {
                 app.m_category = EAppCategory::FIRST;
             }
-            app.m_layer = rule.layer;
+            app.m_layer        = rule.layer;
             app.m_forceTimeout = rule.forceTimeout;
             if (rule.hidden.has_value()) {
                 app.m_hidden = rule.hidden.value();
@@ -919,8 +903,8 @@ void CAppState::checkStageTransition() {
         return;
     }
 
-    const auto& currentStage = m_stages[m_stageIndex];
-    bool hasAliveInCurrentStage = false;
+    const auto& currentStage           = m_stages[m_stageIndex];
+    bool        hasAliveInCurrentStage = false;
     for (const auto& app : m_apps) {
         if (app->appAlive() && isAppInStage(*app, currentStage)) {
             hasAliveInCurrentStage = true;
@@ -928,10 +912,10 @@ void CAppState::checkStageTransition() {
         }
     }
 
-    float stageSecs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_stageStarted).count() / 1000.F;
+    float stageSecs      = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_stageStarted).count() / 1000.F;
     float currentTimeout = getTimeoutForStage(currentStage);
 
-    bool timeoutExpired = (stageSecs >= currentTimeout);
+    bool  timeoutExpired = (stageSecs >= currentTimeout);
 
     if (!hasAliveInCurrentStage || timeoutExpired) {
         if (timeoutExpired && hasAliveInCurrentStage) {
@@ -967,7 +951,7 @@ void CAppState::advanceStage() {
         return;
     }
 
-    m_stageStarted = std::chrono::steady_clock::now();
+    m_stageStarted        = std::chrono::steady_clock::now();
     const auto& nextStage = m_stages[m_stageIndex];
     g_logger->log(LOG_DEBUG, "Transitioning to stage: {}", stageName(nextStage));
 
@@ -986,9 +970,9 @@ bool CAppState::isAppInStage(const CApp& app, const SShutdownStage& stage) const
 }
 
 float CAppState::getTimeoutForStage(const SShutdownStage& stage) const {
-    float maxTimeout = 0.F;
-    bool hasUnlimited = false;
-    bool hasApps = false;
+    float maxTimeout   = 0.F;
+    bool  hasUnlimited = false;
+    bool  hasApps      = false;
 
     for (const auto& app : m_apps) {
         if (app->appAlive() && isAppInStage(*app, stage)) {
@@ -1009,24 +993,20 @@ float CAppState::getTimeoutForStage(const SShutdownStage& stage) const {
     }
 
     switch (stage.category) {
-        case EAppCategory::FIRST:
-            return m_timeoutFirst;
-        case EAppCategory::NORMAL:
-            return m_timeoutNormal;
-        case EAppCategory::LAST:
-            return m_timeoutLast;
-        default:
-            return 0.F;
+        case EAppCategory::FIRST: return m_timeoutFirst;
+        case EAppCategory::NORMAL: return m_timeoutNormal;
+        case EAppCategory::LAST: return m_timeoutLast;
+        default: return 0.F;
     }
 }
 
 std::string CAppState::stageName(const SShutdownStage& stage) const {
     std::string catName;
     switch (stage.category) {
-        case EAppCategory::FIRST:  catName = "FIRST"; break;
+        case EAppCategory::FIRST: catName = "FIRST"; break;
         case EAppCategory::NORMAL: catName = "NORMAL"; break;
-        case EAppCategory::LAST:   catName = "LAST"; break;
-        default:                   catName = "UNKNOWN"; break;
+        case EAppCategory::LAST: catName = "LAST"; break;
+        default: catName = "UNKNOWN"; break;
     }
     return std::format("{}(layer {})", catName, stage.layer);
 }
