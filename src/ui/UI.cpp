@@ -318,10 +318,36 @@ void CMonitorState::update() {
         hasCurrentStage = true;
     }
 
+    State::SShutdownStage lastStage = { (State::EAppCategory)-1, -1 };
+    bool first = true;
+
     for (const auto& APP : APPS) {
         if (APP->m_hidden || APP->m_hasWindow) {
             continue;
         }
+
+        State::SShutdownStage appStage = { APP->m_category, APP->m_layer };
+        if (!first && (appStage.category != lastStage.category || appStage.layer != lastStage.layer)) {
+            auto dividerNull = Hyprtoolkit::CNullBuilder::begin()->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_ABSOLUTE, {1.F, 24.F}})->commence();
+            auto dividerLine = Hyprtoolkit::CRectangleBuilder::begin()
+                                ->size({Hyprtoolkit::CDynamicSize::HT_SIZE_PERCENT, Hyprtoolkit::CDynamicSize::HT_SIZE_ABSOLUTE, {1.F, 1.F}})
+                                ->color([] { 
+                                    auto col = parseColor(State::state()->m_lineColor, g_ui->backend()->getPalette()->m_colors.text); 
+                                    col.a *= 0.25F; 
+                                    return col;
+                                })
+                                ->commence();
+            dividerLine->setPositionMode(Hyprtoolkit::IElement::HT_POSITION_ABSOLUTE);
+            dividerLine->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_LEFT, true);
+            dividerLine->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_RIGHT, true);
+            dividerLine->setPositionFlag(Hyprtoolkit::IElement::HT_POSITION_FLAG_VCENTER, true);
+            dividerNull->addChild(dividerLine);
+            m_appListLayout->addChild(dividerNull);
+        }
+
+        lastStage = appStage;
+        first = false;
+
         bool inActiveStage = hasCurrentStage && State::state()->isAppInStage(*APP, currentStage) && APP->appAlive();
         m_apps.emplace_back(makeUnique<SAppListApp>(APP->m_class, APP->m_title, inActiveStage, APP->isProcess(), APP->isLayer()));
         m_appListLayout->addChild(m_apps.back()->m_null);
