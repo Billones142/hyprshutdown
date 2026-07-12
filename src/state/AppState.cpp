@@ -288,11 +288,26 @@ bool CAppState::init() {
         return (int)m_stages.size();
     };
 
+    auto getTypeIndex = [](const CApp& app) -> int {
+        if (!app.isProcess() && !app.isLayer()) {
+            return 0; // Windows
+        }
+        if (app.isLayer()) {
+            return 1; // Wayland layers
+        }
+        return 2; // Programs/processes
+    };
+
     std::stable_sort(m_apps.begin(), m_apps.end(), [&](const UP<CApp>& a, const UP<CApp>& b) {
         int idxA = getStageIndex(*a);
         int idxB = getStageIndex(*b);
         if (idxA != idxB) {
             return idxA < idxB;
+        }
+        int typeA = getTypeIndex(*a);
+        int typeB = getTypeIndex(*b);
+        if (typeA != typeB) {
+            return typeA < typeB;
         }
         return a->m_class < b->m_class;
     });
