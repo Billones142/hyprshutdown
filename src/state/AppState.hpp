@@ -1,12 +1,12 @@
 #pragma once
 
 #include "../helpers/Memory.hpp"
+#include "../helpers/Config.hpp"
 
 #include <glaze/glaze.hpp>
 
 #include <chrono>
 #include <cstdint>
-
 #include <regex>
 
 namespace State {
@@ -23,36 +23,6 @@ namespace State {
         bool         operator==(const SShutdownStage& other) const {
             return category == other.category && layer == other.layer;
         }
-    };
-
-    struct SShutdownRule {
-        int                 layer        = 1;
-        float               forceTimeout = -1.0F;
-
-        std::string         classPattern;
-        std::string         titlePattern;
-        std::string         namePattern;
-        std::string         cmdlinePattern;
-        std::string         pathPattern;
-        std::string         userPattern;
-        std::string         pidPattern;
-
-        std::regex          regexClass;
-        std::regex          regexTitle;
-        std::regex          regexName;
-        std::regex          regexCmdline;
-        std::regex          regexPath;
-        std::regex          regexUser;
-        std::regex          regexPid;
-
-        bool                hasClass   = false;
-        bool                hasTitle   = false;
-        bool                hasName    = false;
-        bool                hasCmdline = false;
-        bool                hasPath    = false;
-        bool                hasUser    = false;
-        bool                hasPid     = false;
-        std::optional<bool> hidden;
     };
     class CApp {
       public:
@@ -132,7 +102,6 @@ namespace State {
         std::chrono::steady_clock::time_point m_stageStarted;
 
         void                                  loadConfig();
-        std::string                           getConfigPath();
         void                                  classifyApp(CApp& app);
         bool                                  matchRule(const CApp& app, const SShutdownRule& rule);
         void                                  startAppQuit(CApp& app);

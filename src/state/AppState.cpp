@@ -6,13 +6,10 @@
 #include <algorithm>
 #include <ranges>
 #include <csignal>
-#include <fstream>
 #include <pwd.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <unordered_map>
 #include <functional>
-#include <cctype>
 
 #include <hyprutils/string/String.hpp>
 
@@ -253,11 +250,11 @@ bool CAppState::init() {
 
     for (const auto& app : m_apps) {
         if (app->m_category == EAppCategory::FIRST) {
-            if (std::find(firstLayers.begin(), firstLayers.end(), app->m_layer) == firstLayers.end()) {
+            if (std::ranges::find(firstLayers, app->m_layer) == firstLayers.end()) {
                 firstLayers.push_back(app->m_layer);
             }
         } else if (app->m_category == EAppCategory::LAST) {
-            if (std::find(lastLayers.begin(), lastLayers.end(), app->m_layer) == lastLayers.end()) {
+            if (std::ranges::find(lastLayers, app->m_layer) == lastLayers.end()) {
                 lastLayers.push_back(app->m_layer);
             }
         } else if (app->m_category == EAppCategory::NORMAL) {
@@ -265,27 +262,29 @@ bool CAppState::init() {
         }
     }
 
-    std::sort(firstLayers.rbegin(), firstLayers.rend());
-    std::sort(lastLayers.begin(), lastLayers.end());
+    std::ranges::sort(firstLayers, std::greater<>{});
+    std::ranges::sort(lastLayers);
 
     m_stages.clear();
-    for (int l : firstLayers) {
-        m_stages.push_back({EAppCategory::FIRST, l});
+    for (int layerIndex : firstLayers) {
+        m_stages.push_back({.category = EAppCategory::FIRST, .layer = layerIndex});
     }
     if (hasNormal || m_stages.empty()) {
-        m_stages.push_back({EAppCategory::NORMAL, 0});
+        m_stages.push_back({.category = EAppCategory::NORMAL, .layer = 0});
     }
-    for (int l : lastLayers) {
-        m_stages.push_back({EAppCategory::LAST, l});
+    for (int layerIndex : lastLayers) {
+        m_stages.push_back({.category = EAppCategory::LAST, .layer = layerIndex});
     }
 
     auto getStageIndex = [&](const CApp& app) -> int {
-        for (int i = 0; i < (int)m_stages.size(); ++i) {
-            if (app.m_category == m_stages[i].category && app.m_layer == m_stages[i].layer) {
-                return i;
+        int index = 0;
+        for (const auto& stage : m_stages) {
+            if (app.m_category == stage.category && app.m_layer == stage.layer) {
+                return index;
             }
+            index++;
         }
-        return (int)m_stages.size();
+        return static_cast<int>(m_stages.size());
     };
 
     auto getTypeIndex = [](const CApp& app) -> int {
@@ -298,7 +297,7 @@ bool CAppState::init() {
         return 2; // Programs/processes
     };
 
-    std::stable_sort(m_apps.begin(), m_apps.end(), [&](const UP<CApp>& a, const UP<CApp>& b) {
+    std::ranges::stable_sort(m_apps, [&](const UP<CApp>& a, const UP<CApp>& b) {
         int idxA = getStageIndex(*a);
         int idxB = getStageIndex(*b);
         if (idxA != idxB) {
@@ -331,7 +330,7 @@ bool CAppState::init() {
 
     // Trigger quit for the first stage
     if (!m_stages.empty()) {
-        const auto& currentStage = m_stages[m_stageIndex];
+        const auto& currentStage = m_stages.at(m_stageIndex);
         g_logger->log(LOG_DEBUG, "Starting stage: {}", stageName(currentStage));
         for (const auto& app : m_apps) {
             if (isAppInStage(*app, currentStage)) {
@@ -467,7 +466,7 @@ void CAppState::forceCurrentStage() {
     if (m_stages.empty() || m_stageIndex >= m_stages.size())
         return;
 
-    const auto& currentStage = m_stages[m_stageIndex];
+    const auto& currentStage = m_stages.at(m_stageIndex);
     g_logger->log(LOG_DEBUG, "Forcing stage: {}", stageName(currentStage));
     for (const auto& app : m_apps) {
         if (app->appAlive() && isAppInStage(*app, currentStage)) {
@@ -479,322 +478,19 @@ void CAppState::forceCurrentStage() {
     advanceStage();
 }
 
-static inline std::string localTrim(std::string_view str) {
-    auto first = str.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos)
-        return "";
-    auto last = str.find_last_not_of(" \t\r\n");
-    return std::string(str.substr(first, (last - first + 1)));
-}
-
-std::string CAppState::getConfigPath() {
-    if (!m_configPathOverride.empty()) {
-        return m_configPathOverride;
-    }
-    std::string configPath;
-    const char* xdgConfig = std::getenv("XDG_CONFIG_HOME");
-    if (xdgConfig && xdgConfig[0] != '\0') {
-        configPath = std::string(xdgConfig) + "/hypr/hyprshutdown.conf";
-    } else {
-        const char* home = std::getenv("HOME");
-        if (home && home[0] != '\0') {
-            configPath = std::string(home) + "/.config/hypr/hyprshutdown.conf";
-        } else {
-            struct passwd* pw = ::getpwuid(getuid());
-            if (pw) {
-                configPath = std::string(pw->pw_dir) + "/.config/hypr/hyprshutdown.conf";
-            }
-        }
-    }
-    return configPath;
-}
-
 void CAppState::loadConfig() {
-    std::string configPath = getConfigPath();
-    g_logger->log(LOG_DEBUG, "Attempting to load config from {}", configPath);
+    CConfig config;
+    config.load(m_configPathOverride);
 
-    std::ifstream ifs(configPath);
-    if (!ifs.good()) {
-        g_logger->log(LOG_DEBUG, "Config file not found, using default shutdown settings");
-        return;
-    }
-
-    std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-
-    // Tokenize
-    std::vector<std::string> tokens;
-    {
-        std::string current;
-        bool        inQuote = false;
-        for (size_t i = 0; i < content.size(); ++i) {
-            char c = content[i];
-            if (inQuote) {
-                if (c == '"') {
-                    inQuote = false;
-                    tokens.push_back(current);
-                    current.clear();
-                } else if (c == '\\' && i + 1 < content.size()) {
-                    current += content[++i];
-                } else {
-                    current += c;
-                }
-            } else {
-                if (std::isspace(c)) {
-                    if (!current.empty()) {
-                        tokens.push_back(current);
-                        current.clear();
-                    }
-                } else if (c == '{' || c == '}' || c == '=' || c == ';' || c == ':') {
-                    if (!current.empty()) {
-                        tokens.push_back(current);
-                        current.clear();
-                    }
-                    tokens.push_back(std::string(1, c));
-                } else if (c == '"') {
-                    if (!current.empty()) {
-                        tokens.push_back(current);
-                        current.clear();
-                    }
-                    inQuote = true;
-                } else if (c == '#') {
-                    if (!current.empty()) {
-                        tokens.push_back(current);
-                        current.clear();
-                    }
-                    while (i < content.size() && content[i] != '\n') {
-                        i++;
-                    }
-                } else if (c == '/' && i + 1 < content.size() && content[i + 1] == '/') {
-                    if (!current.empty()) {
-                        tokens.push_back(current);
-                        current.clear();
-                    }
-                    while (i < content.size() && content[i] != '\n') {
-                        i++;
-                    }
-                } else {
-                    current += c;
-                }
-            }
-        }
-        if (!current.empty()) {
-            tokens.push_back(current);
-        }
-    }
-
-    // Block structure
-    struct SBlock {
-        std::string                                  name;
-        std::unordered_map<std::string, std::string> keyValues;
-        std::vector<SBlock>                          subBlocks;
-    };
-
-    auto parseBlockHelper = [](auto& self, const std::vector<std::string>& tokens, size_t& idx) -> SBlock {
-        SBlock block;
-        while (idx < tokens.size()) {
-            if (tokens[idx] == "}") {
-                idx++; // Consume '}'
-                break;
-            }
-
-            if (idx + 1 < tokens.size() && tokens[idx + 1] == "{") {
-                std::string subName = tokens[idx];
-                idx += 2; // Consume Name and '{'
-                SBlock sub = self(self, tokens, idx);
-                sub.name   = subName;
-                block.subBlocks.push_back(std::move(sub));
-            } else if (idx + 1 < tokens.size() && tokens[idx + 1] == "=") {
-                std::string key = tokens[idx];
-                std::string val;
-                idx += 2; // Consume Key and '='
-                if (idx < tokens.size()) {
-                    val = tokens[idx];
-                    idx++; // Consume Value
-                }
-                if (idx < tokens.size() && (tokens[idx] == ";" || tokens[idx] == ":")) {
-                    idx++; // Consume ';' or ':'
-                }
-                block.keyValues[key] = val;
-            } else {
-                idx++;
-            }
-        }
-        return block;
-    };
-
-    std::vector<SBlock> topBlocks;
-    {
-        size_t idx = 0;
-        while (idx < tokens.size()) {
-            if (idx + 1 < tokens.size() && tokens[idx + 1] == "{") {
-                std::string blockName = tokens[idx];
-                idx += 2; // Consume Name and '{'
-                SBlock top = parseBlockHelper(parseBlockHelper, tokens, idx);
-                top.name   = blockName;
-                topBlocks.push_back(std::move(top));
-            } else if (idx + 1 < tokens.size() && tokens[idx + 1] == "=") {
-                // Top-level key-values (global settings)
-                SBlock globalBlock;
-                globalBlock.name = "global";
-                while (idx < tokens.size() && idx + 1 < tokens.size() && tokens[idx + 1] == "=") {
-                    std::string key = tokens[idx];
-                    std::string val;
-                    idx += 2; // Consume Key and '='
-                    if (idx < tokens.size()) {
-                        val = tokens[idx];
-                        idx++; // Consume Value
-                    }
-                    if (idx < tokens.size() && (tokens[idx] == ";" || tokens[idx] == ":")) {
-                        idx++; // Consume ';' or ':'
-                    }
-                    globalBlock.keyValues[key] = val;
-                }
-                topBlocks.push_back(std::move(globalBlock));
-            } else {
-                idx++;
-            }
-        }
-    }
-
-    // Process blocks
-    m_rules.clear();
-    m_defaultLayer  = -1;
-    m_defaultHidden = false;
-    for (const auto& block : topBlocks) {
-        if (block.name == "general") {
-            if (block.keyValues.contains("line_color")) {
-                m_lineColor = block.keyValues.at("line_color");
-                g_logger->log(LOG_DEBUG, "Config: line_color set to {}", m_lineColor);
-            }
-            if (block.keyValues.contains("row_margin")) {
-                std::string marginVal = block.keyValues.at("row_margin");
-                try {
-                    m_rowMargin = std::stoi(marginVal);
-                } catch (...) { g_logger->log(LOG_ERR, "Config error: invalid row_margin: '{}'", marginVal); }
-                g_logger->log(LOG_DEBUG, "Config: row_margin set to {}", m_rowMargin);
-            }
-            if (block.keyValues.contains("line_width")) {
-                std::string widthVal = block.keyValues.at("line_width");
-                try {
-                    m_lineWidth = std::stoi(widthVal);
-                } catch (...) { g_logger->log(LOG_ERR, "Config error: invalid line_width: '{}'", widthVal); }
-                g_logger->log(LOG_DEBUG, "Config: line_width set to {}", m_lineWidth);
-            }
-            if (block.keyValues.contains("hide_processes")) {
-                m_hideProcesses = (block.keyValues.at("hide_processes") == "true" || block.keyValues.at("hide_processes") == "1");
-                g_logger->log(LOG_DEBUG, "Config: hide_processes set to {}", m_hideProcesses);
-            }
-            if (block.keyValues.contains("systemd_user_exit")) {
-                m_systemdUserExit = (block.keyValues.at("systemd_user_exit") == "true" || block.keyValues.at("systemd_user_exit") == "1");
-                g_logger->log(LOG_DEBUG, "Config: systemd_user_exit set to {}", m_systemdUserExit);
-            }
-        } else if (block.name == "default") {
-            if (block.keyValues.contains("timeout")) {
-                std::string timeoutVal = block.keyValues.at("timeout");
-                if (timeoutVal == "unlimited") {
-                    m_defaultForceTimeout = -1.0F;
-                } else {
-                    try {
-                        m_defaultForceTimeout = std::stof(timeoutVal);
-                    } catch (...) { g_logger->log(LOG_ERR, "Config error: invalid default timeout: '{}'", timeoutVal); }
-                }
-                g_logger->log(LOG_DEBUG, "Config: default force timeout set to {}", m_defaultForceTimeout);
-            }
-            if (block.keyValues.contains("layer")) {
-                std::string layerVal = block.keyValues.at("layer");
-                try {
-                    m_defaultLayer = std::stoi(layerVal);
-                } catch (...) { g_logger->log(LOG_ERR, "Config error: invalid default layer: '{}'", layerVal); }
-                g_logger->log(LOG_DEBUG, "Config: default layer set to {}", m_defaultLayer);
-            }
-            if (block.keyValues.contains("hidden")) {
-                m_defaultHidden = (block.keyValues.at("hidden") == "true" || block.keyValues.at("hidden") == "1");
-                g_logger->log(LOG_DEBUG, "Config: default hidden set to {}", m_defaultHidden);
-            } else if (block.keyValues.contains("hide")) {
-                m_defaultHidden = (block.keyValues.at("hide") == "true" || block.keyValues.at("hide") == "1");
-                g_logger->log(LOG_DEBUG, "Config: default hidden set to {}", m_defaultHidden);
-            }
-        } else if (block.name.starts_with("layer_")) {
-            int layerNum = 1;
-            try {
-                layerNum = std::stoi(block.name.substr(6));
-            } catch (...) {
-                g_logger->log(LOG_ERR, "Config error: invalid layer number: '{}'", block.name);
-                continue;
-            }
-
-            std::optional<bool> layerHidden;
-            if (block.keyValues.contains("hidden")) {
-                layerHidden = (block.keyValues.at("hidden") == "true" || block.keyValues.at("hidden") == "1");
-            } else if (block.keyValues.contains("hide")) {
-                layerHidden = (block.keyValues.at("hide") == "true" || block.keyValues.at("hide") == "1");
-            }
-
-            for (const auto& sub : block.subBlocks) {
-                SShutdownRule rule;
-                rule.layer        = layerNum;
-                rule.forceTimeout = m_defaultForceTimeout;
-                if (layerHidden.has_value()) {
-                    rule.hidden = layerHidden;
-                }
-
-                if (sub.keyValues.contains("hidden")) {
-                    rule.hidden = (sub.keyValues.at("hidden") == "true" || sub.keyValues.at("hidden") == "1");
-                } else if (sub.keyValues.contains("hide")) {
-                    rule.hidden = (sub.keyValues.at("hide") == "true" || sub.keyValues.at("hide") == "1");
-                }
-
-                if (sub.keyValues.contains("timeout")) {
-                    std::string timeoutVal = sub.keyValues.at("timeout");
-                    if (timeoutVal == "unlimited") {
-                        rule.forceTimeout = -1.0F;
-                    } else {
-                        try {
-                            rule.forceTimeout = std::stof(timeoutVal);
-                        } catch (...) { g_logger->log(LOG_ERR, "Config error: invalid timeout in sub-block '{}': '{}'", sub.name, timeoutVal); }
-                    }
-                }
-
-                auto addPattern = [](const std::string& pattern, std::string& patternOut, std::regex& regexOut, bool& flagOut) {
-                    patternOut = pattern;
-                    try {
-                        regexOut = std::regex(pattern, std::regex_constants::ECMAScript | std::regex_constants::nosubs);
-                        flagOut  = true;
-                    } catch (const std::regex_error& e) { g_logger->log(LOG_ERR, "Config error: invalid regex '{}': {}", pattern, e.what()); }
-                };
-
-                if (sub.keyValues.contains("class")) {
-                    addPattern(sub.keyValues.at("class"), rule.classPattern, rule.regexClass, rule.hasClass);
-                }
-                if (sub.keyValues.contains("title")) {
-                    addPattern(sub.keyValues.at("title"), rule.titlePattern, rule.regexTitle, rule.hasTitle);
-                }
-                if (sub.keyValues.contains("name")) {
-                    addPattern(sub.keyValues.at("name"), rule.namePattern, rule.regexName, rule.hasName);
-                }
-                if (sub.keyValues.contains("cmdline")) {
-                    addPattern(sub.keyValues.at("cmdline"), rule.cmdlinePattern, rule.regexCmdline, rule.hasCmdline);
-                }
-                if (sub.keyValues.contains("path")) {
-                    addPattern(sub.keyValues.at("path"), rule.pathPattern, rule.regexPath, rule.hasPath);
-                }
-                if (sub.keyValues.contains("user")) {
-                    addPattern(sub.keyValues.at("user"), rule.userPattern, rule.regexUser, rule.hasUser);
-                }
-                if (sub.keyValues.contains("pid")) {
-                    addPattern(sub.keyValues.at("pid"), rule.pidPattern, rule.regexPid, rule.hasPid);
-                }
-
-                bool hasAnyMatch = rule.hasClass || rule.hasTitle || rule.hasName || rule.hasCmdline || rule.hasPath || rule.hasUser || rule.hasPid;
-                if (!hasAnyMatch) {
-                    addPattern(sub.name, rule.classPattern, rule.regexClass, rule.hasClass);
-                }
-
-                g_logger->log(LOG_DEBUG, "Config rule added for sub-block '{}': layer={}, forceTimeout={}s", sub.name, rule.layer, rule.forceTimeout);
-                m_rules.push_back(std::move(rule));
-            }
-        }
-    }
+    m_lineColor = config.lineColor;
+    m_rowMargin = config.rowMargin;
+    m_lineWidth = config.lineWidth;
+    m_hideProcesses = config.hideProcesses;
+    m_systemdUserExit = config.systemdUserExit;
+    m_defaultForceTimeout = config.defaultForceTimeout;
+    m_defaultLayer = config.defaultLayer;
+    m_defaultHidden = config.defaultHidden;
+    m_rules = std::move(config.rules);
 }
 
 void CAppState::classifyApp(CApp& app) {
@@ -903,7 +599,7 @@ void CAppState::checkStageTransition() {
         return;
     }
 
-    const auto& currentStage           = m_stages[m_stageIndex];
+    const auto& currentStage           = m_stages.at(m_stageIndex);
     bool        hasAliveInCurrentStage = false;
     for (const auto& app : m_apps) {
         if (app->appAlive() && isAppInStage(*app, currentStage)) {
@@ -952,7 +648,7 @@ void CAppState::advanceStage() {
     }
 
     m_stageStarted        = std::chrono::steady_clock::now();
-    const auto& nextStage = m_stages[m_stageIndex];
+    const auto& nextStage = m_stages.at(m_stageIndex);
     g_logger->log(LOG_DEBUG, "Transitioning to stage: {}", stageName(nextStage));
 
     for (const auto& app : m_apps) {
