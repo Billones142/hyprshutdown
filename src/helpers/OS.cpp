@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <optional>
 
 #include <hyprutils/string/String.hpp>
 #include <hyprutils/memory/Casts.hpp>
